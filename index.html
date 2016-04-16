@@ -1,0 +1,211 @@
+<!DOCTYPE html>
+<html lang="en">
+	<head>
+		<title>three.js webgl - geometry - Subdivisions with Catmull-Clark</title>
+		<meta charset="utf-8">
+		<meta name="viewport" content="width=device-width, user-scalable=no, minimum-scale=1.0, maximum-scale=1.0">
+		<style>
+			body {
+				font-family: Monospace;
+				background-color: #f0f0f0;
+				margin: 0px;
+				overflow: hidden;
+			}
+		</style>
+	</head>
+	<body>
+
+        <!-- Pusher -->
+        <script src="https://js.pusher.com/3.0/pusher.min.js"></script>
+        
+        <!-- Three.js -->
+		<script src="../three.js/build/three.min.js"></script>
+        <script src="../three.js/examples/js/loaders/STLLoader.js"></script>
+		<script src="../three.js/examples/js/controls/OrbitControls.js"></script>
+
+		<script>
+            Pusher.log = function(message) {
+                if (window.console && window.console.log) {
+                    window.console.log(message);
+                }    
+            }
+            
+            var pusher = new Pusher('2683a18d99f76df727ec', {
+                cluster: 'ap1',
+                encrypted: true
+            });
+            
+            var channel = pusher.subscribe('fabchess');
+            channel.bind('pos_change', function(data) {
+                alert('pos_change');
+            });
+            
+            channel.bind('move_white_side', function(data) {
+                alert('move_white_side');
+            });
+
+            channel.bind('move_black_side', function(data) {
+                alert('move_black_side');
+            });
+
+            const GRID_SIZE = 40;
+            const GRID_ORIGIN = GRID_SIZE * 4.5;
+            
+            const WHITE_CHESS = 64;
+            const BLACK_CHESS = 128;
+            const K_KING = 'King2';
+            const K_QUEEN = 'Queen2';
+            const K_BISHOP = 'Bishop2';
+            const K_KNIGHT = 'Knight2';
+            const K_ROOK = 'Rook2';
+            const K_PAWN = 'Pawn2';
+            
+            var timer;
+            var geometries;
+            var board;
+			var container;
+			var camera, controls, scene, renderer;
+            
+            function loadGeometry(key) {
+                return function(geometry) {
+                    geometry.computeBoundingBox();
+                    geometry.center();
+                    geometries[key] = geometry;
+                };
+            }
+            function createChessModel(geometry, pos, side) {
+                var c = (side == WHITE_CHESS ? 0xFFFFFF : 0x000000);
+                var material = new THREE.MeshPhongMaterial( { color: c, specular: 0x111111, shininess: 30 } );
+                var mesh = new THREE.Mesh( geometry, material );
+                mesh.centerOnPlane();
+                mesh.translateX(GRID_SIZE * pos.x - GRID_ORIGIN);
+                mesh.translateZ(GRID_SIZE * pos.y - GRID_ORIGIN);
+                mesh.castShadow = true;
+                mesh.receiveShadow = true;
+                scene.add( mesh );
+            }
+            
+			// start scene
+			init();
+			animate();
+            
+			function init() {
+				container = document.createElement( 'div' );
+				document.body.appendChild( container );
+
+				camera = new THREE.PerspectiveCamera( 50, window.innerWidth / window.innerHeight, 0.1, 10000 );
+                camera.position.y = 150;
+				camera.position.z = 300;
+				scene = new THREE.Scene();
+				var light = new THREE.PointLight( 0xffffff, 1);
+				light.position.set( 0, 1000, 0);
+                
+				scene.add( light );
+				renderer = new THREE.WebGLRenderer( { antialias: true } ); // WebGLRenderer CanvasRenderer
+				renderer.setClearColor( 0xf0f0f0 );
+				renderer.setPixelRatio( window.devicePixelRatio );
+				renderer.setSize( window.innerWidth, window.innerHeight );
+				container.appendChild( renderer.domElement );
+				//
+				controls = new THREE.OrbitControls( camera, renderer.domElement );
+				window.addEventListener( 'resize', onWindowResize, false );
+                
+                initChesses();
+                createBoard();
+                timer = setInterval(checkGeometriesLoaded, 1000);
+			}
+            function initChesses() {
+                board = new Array();
+                
+                for (var i = 1; i <= 8; i ++) {
+                    board[i] = new Array();
+                    for (var j = 1; j <= 8; j ++)
+                        board[i][j] = null;
+                }
+
+                geometries = {};
+                geometries[K_KING] = null;
+                geometries[K_QUEEN] = null;
+                geometries[K_BISHOP] = null;
+                geometries[K_KNIGHT] = null;
+                geometries[K_ROOK] = null;
+                geometries[K_PAWN] = null;
+                
+                for (var key in geometries) {
+                    (new THREE.STLLoader).load('./chesses/' + key + '.stl', true, loadGeometry(key));
+                }
+                
+                // white chess
+                board[1][4] = {chess: K_KING, side: WHITE_CHESS};
+                board[1][5] = {chess: K_QUEEN, side: WHITE_CHESS};
+                board[1][3] = {chess: K_BISHOP, side: WHITE_CHESS};
+                board[1][6] = {chess: K_BISHOP, side: WHITE_CHESS};
+                board[1][2] = {chess: K_KNIGHT, side: WHITE_CHESS};
+                board[1][7] = {chess: K_KNIGHT, side: WHITE_CHESS};
+                board[1][1] = {chess: K_ROOK, side: WHITE_CHESS};
+                board[1][8] = {chess: K_ROOK, side: WHITE_CHESS};
+                // black chess
+                board[8][4] = {chess: K_KING, side: BLACK_CHESS};
+                board[8][5] = {chess: K_QUEEN, side: BLACK_CHESS};
+                board[8][3] = {chess: K_BISHOP, side: BLACK_CHESS};
+                board[8][6] = {chess: K_BISHOP, side: BLACK_CHESS};
+                board[8][2] = {chess: K_KNIGHT, side: BLACK_CHESS};
+                board[8][7] = {chess: K_KNIGHT, side: BLACK_CHESS};
+                board[8][1] = {chess: K_ROOK, side: BLACK_CHESS};
+                board[8][8] = {chess: K_ROOK, side: BLACK_CHESS};
+                
+                for (var i = 1; i <= 8; i ++) {
+                    board[2][i] = {chess: K_PAWN, side: WHITE_CHESS};
+                    board[7][i] = {chess: K_PAWN, side: BLACK_CHESS};
+                }
+            }
+            function createBoard() {    
+                var gridHelper = new THREE.GridHelper( GRID_SIZE * 4, GRID_SIZE );
+                scene.add( gridHelper );
+            }
+            function createChesses() {                
+                for (var i = 1; i <= 8; i ++) {
+                    for (var j = 1; j <= 8; j ++) {
+                        if (board[i][j] == null) continue;
+                        
+                        var key = board[i][j].chess;
+                        switch (key) {
+                            case K_KING:
+                            case K_QUEEN:
+                            case K_BISHOP:
+                            case K_KNIGHT:
+                            case K_ROOK:
+                            case K_PAWN:
+                                createChessModel(geometries[key], {x: i, y: j}, board[i][j].side);
+                                break;
+                        }
+                    }
+                }
+            }
+            function checkGeometriesLoaded()
+            {
+                for (var k in geometries) {
+                    if (geometries[k] === null) return ;
+                }
+                
+                clearInterval(timer);
+                createChesses();
+            }
+			function onWindowResize() {
+				camera.aspect = window.innerWidth / window.innerHeight;
+				camera.updateProjectionMatrix();
+				renderer.setSize( window.innerWidth, window.innerHeight );
+			}
+			//
+			function animate() {
+				requestAnimationFrame( animate );
+				controls.update();
+				render();
+			}
+			function render() {
+				renderer.render( scene, camera );
+			}                
+		</script>
+
+	</body>
+</html>
